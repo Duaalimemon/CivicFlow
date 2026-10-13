@@ -1,0 +1,23 @@
+# ==============================================================================
+# CivicFlow Supabase Configuration
+# File: supabase/config.toml
+# ==============================================================================
+project_id = "civicflow"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[db.seed]
+# Seeds are executed exclusively during local development resets (e.g. `supabase db reset`)
+# and are NEVER applied during production migrations or deployments.
+enabled = true
+sql_paths = ["supabase/seed.sql"]

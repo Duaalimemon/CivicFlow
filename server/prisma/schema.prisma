@@ -1,0 +1,129 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  CITIZEN
+  CIVIC_OFFICIAL
+  ADMINISTRATOR
+}
+
+enum IncidentPriority {
+  LOW
+  ELEVATED
+  CRITICAL
+  CATASTROPHIC
+}
+
+enum IncidentStatus {
+  RECEIVED
+  TRIAGED
+  DISPATCHED
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TelemetryType {
+  WATER_LEVEL_METRIC
+  TRAFFIC_SENSOR
+  AIR_QUALITY_PPM
+  POWER_GRID_VOLTAGE
+  STRUCTURAL_VIBRATION
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String
+  fullName     String
+  role         Role          @default(CITIZEN)
+  badgeNumber  String?
+  department   String?
+  reports      CivicReport[] @relation("ReportAuthor")
+  auditLogs    AuditLog[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([role])
+}
+
+model CivicReport {
+  id              String           @id @default(uuid())
+  trackingCode    String           @unique // e.g. "CIV-2026-9042"
+  title           String
+  description     String
+  category        String           // e.g. "Water Grid", "Power Grid", "Transit"
+  priority        IncidentPriority @default(LOW)
+  status          IncidentStatus   @default(RECEIVED)
+  latitude        Float
+  longitude       Float
+  locationAddress String
+  mediaUrls       String[]
+  authorId        String?
+  author          User?            @relation("ReportAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  aiInsights      AIInsight[]
+  auditLogs       AuditLog[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([status, priority])
+  @@index([latitude, longitude])
+  @@index([createdAt])
+}
+
+model AIInsight {
+  id                 String           @id @default(uuid())
+  reportId           String
+  report             CivicReport      @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  triagePriority     IncidentPriority
+  urgencyScore       Float            // 0.00 to 1.00
+  sentimentIndex     Float            // -1.00 to 1.00
+  executiveSummary   String           // High-density institutional summary
+  suggestedAction    String           // Recommended dispatch protocol
+  targetDepartment   String           // Municipal agency routing
+  confidenceScore    Float            // Model confidence rating
+  agentEvaluations   Json             // Triad: Triage, Sentiment, Dispatch
+  rawModelOutput     Json
+  createdAt          DateTime         @default(now())
+
+  @@index([reportId])
+}
+
+model TelemetryStream {
+  id          String        @id @default(uuid())
+  sensorId    String
+  sensorName  String
+  sensorType  TelemetryType
+  metricValue Float
+  unit        String        // e.g. "psi", "kV", "ppm"
+  threshold   Float
+  isAnomaly   Boolean       @default(false)
+  latitude    Float
+  longitude   Float
+  location    String
+  timestamp   DateTime      @default(now())
+
+  @@index([sensorId, timestamp])
+  @@index([isAnomaly])
+}
+
+model AuditLog {
+  id        String       @id @default(uuid())
+  reportId  String?
+  report    CivicReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  userId    String?
+  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String       // "REPORT_CREATED", "STATUS_CHANGE", "DISPATCH_AUTHORIZED"
+  deltaDiff Json?
+  ipAddress String?
+  timestamp DateTime     @default(now())
+
+  @@index([reportId, timestamp])
+  @@index([userId])
+}

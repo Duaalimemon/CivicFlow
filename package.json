@@ -1,0 +1,16 @@
+{
+  "name": "civicsense-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CivicSense AI - Institutional Municipal Command Center & Multi-Agent Telemetry Engine",
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"bgBlue.bold,bgTeal.bold\" \"npm run dev:server\" \"npm run dev:client\"",
+    "test": "npm --prefix server test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
