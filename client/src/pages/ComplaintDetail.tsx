@@ -17,7 +17,8 @@ import {
   History,
   XCircle,
   FileCheck2,
-  Lock
+  Lock,
+  HeartHandshake
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ComplaintPriority, ComplaintStatus } from '../types';
@@ -30,6 +31,7 @@ export const ComplaintDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const {
+    currentUser,
     getComplaintById,
     departments,
     staff,
@@ -54,6 +56,66 @@ export const ComplaintDetail: React.FC = () => {
   const [isOverrideOpen, setIsOverrideOpen] = useState(false);
   const [overrideTarget, setOverrideTarget] = useState<ComplaintPriority>('High');
   const [overrideReason, setOverrideReason] = useState('');
+
+  // AI Multi-Agent Triage state
+  const [isTriagingAI, setIsTriagingAI] = useState(false);
+  const [aiInsight, setAiInsight] = useState<any>(null);
+  const [triageError, setTriageError] = useState<string | null>(null);
+
+  // Fetch verified backend insights for the current report on mount
+  React.useEffect(() => {
+    let isMounted = true;
+    if (complaint?.id && currentUser.role === 'official') {
+      fetch(`/api/v1/ai/insights/${complaint.id}`, { credentials: 'include' })
+        .then(res => (res.ok ? res.json() : null))
+        .then(json => {
+          if (isMounted && json?.success && Array.isArray(json.data) && json.data.length > 0) {
+            setAiInsight(json.data[0]);
+          }
+        })
+        .catch(() => {});
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [complaint?.id, currentUser.role]);
+
+  const handleTriggerAITriage = async () => {
+    if (!complaint?.id || isTriagingAI) return;
+    setIsTriagingAI(true);
+    setTriageError(null);
+    try {
+      const res = await fetch(`/api/v1/ai/triage/${complaint.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.data) {
+        setAiInsight(data.data);
+        const priorityMap: Record<string, ComplaintPriority> = {
+          LOW: 'Low',
+          ELEVATED: 'Medium',
+          CRITICAL: 'High',
+          CATASTROPHIC: 'Urgent',
+        };
+        const newPriority = priorityMap[data.data.triagePriority];
+        if (newPriority && newPriority !== complaint.priority) {
+          overridePriority(
+            complaint.id,
+            newPriority,
+            `Multi-agent AI automated triage dispatch: ${data.data.suggestedAction}`
+          );
+        }
+      } else {
+        setTriageError(data.message || 'AI Triage dispatch failed.');
+      }
+    } catch (err: any) {
+      setTriageError(err.message || 'Network error triggering AI triage.');
+    } finally {
+      setIsTriagingAI(false);
+    }
+  };
 
   // Resolution form state
   const [isResolving, setIsResolving] = useState(false);
@@ -231,13 +293,33 @@ export const ComplaintDetail: React.FC = () => {
           </div>
 
           {/* Automated Triage Explanation Card */}
-          <div className="p-6 rounded-2xl border border-cyan-500/30 bg-cyan-500/5 dark:bg-brand-cyan/5 space-y-3">
-            <div className="flex items-center gap-2 text-brand-teal dark:text-brand-cyan">
-              <Sparkles className="h-4 w-4" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
-                Deterministic Triage Breakdown
-              </h3>
+          <div className="p-6 rounded-2xl border border-cyan-500/30 bg-cyan-500/5 dark:bg-brand-cyan/5 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2 text-brand-teal dark:text-brand-cyan">
+                <Sparkles className="h-4 w-4" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+                  Deterministic & AI Multi-Agent Triage
+                </h3>
+              </div>
+              {currentUser.role === 'official' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleTriggerAITriage}
+                  isLoading={isTriagingAI}
+                  leftIcon={<Sparkles className="h-3.5 w-3.5" />}
+                  className="text-xs"
+                >
+                  {aiInsight ? 'Re-Run Multi-Agent Triage' : 'Run Multi-Agent AI Triage'}
+                </Button>
+              )}
             </div>
+
+            {triageError && (
+              <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs">
+                {triageError}
+              </div>
+            )}
 
             <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
               <p>
@@ -262,6 +344,69 @@ export const ComplaintDetail: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Live Multi-Agent AI Triage Breakdown */}
+            {aiInsight && (
+              <div className="mt-4 pt-4 border-t border-cyan-500/20 space-y-3">
+                <div className="flex items-center justify-between text-xs font-semibold text-slate-800 dark:text-slate-200">
+                  <span className="flex items-center gap-1.5 text-brand-teal dark:text-brand-cyan">
+                    <Building2 className="h-3.5 w-3.5" />
+                    <span>Target Agency: {aiInsight.targetDepartment}</span>
+                  </span>
+                  <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                    Confidence: {Math.round((aiInsight.confidenceScore || 0.94) * 100)}%
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+                  {aiInsight.summary}
+                </p>
+
+                <div className="p-2.5 rounded-lg bg-cyan-500/10 dark:bg-brand-cyan/10 border border-cyan-500/30 text-brand-teal dark:text-brand-cyan text-[11px] font-mono">
+                  Operational Directive: {aiInsight.suggestedAction}
+                </div>
+
+                {aiInsight.agentEvaluations && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2">
+                    {/* Agent 1 */}
+                    <div className="p-3 rounded-xl border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-rose-500">
+                        <ShieldAlert className="h-3.5 w-3.5" />
+                        <span>1. Hazard Agent</span>
+                      </div>
+                      <div className="text-[10px] text-slate-600 dark:text-slate-400 space-y-0.5">
+                        <p><strong>Severity:</strong> {aiInsight.agentEvaluations.triageAgent?.hazardSeverity || 'Assessed'}</p>
+                        <p><strong>Vulnerability:</strong> {aiInsight.agentEvaluations.triageAgent?.infrastructuralVulnerability || 'Standard impact'}</p>
+                      </div>
+                    </div>
+
+                    {/* Agent 2 */}
+                    <div className="p-3 rounded-xl border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-sky-500">
+                        <HeartHandshake className="h-3.5 w-3.5" />
+                        <span>2. Sentiment Agent</span>
+                      </div>
+                      <div className="text-[10px] text-slate-600 dark:text-slate-400 space-y-0.5">
+                        <p><strong>Agitation:</strong> {aiInsight.agentEvaluations.sentimentAgent?.publicAgitation || 'Standard concern'}</p>
+                        <p><strong>Cascade:</strong> {aiInsight.agentEvaluations.sentimentAgent?.cascadeRisk || 'Contained'}</p>
+                      </div>
+                    </div>
+
+                    {/* Agent 3 */}
+                    <div className="p-3 rounded-xl border border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-500">
+                        <Building2 className="h-3.5 w-3.5" />
+                        <span>3. Dispatch Agent</span>
+                      </div>
+                      <div className="text-[10px] text-slate-600 dark:text-slate-400 space-y-0.5">
+                        <p><strong>Work Order:</strong> {aiInsight.agentEvaluations.dispatchAgent?.workOrderType || 'DISPATCH_ORDER'}</p>
+                        <p><strong>Crew Tier:</strong> {aiInsight.agentEvaluations.dispatchAgent?.crewTierRequired || 'Tier 2 Field Unit'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Duplicate Detection Suggestions */}

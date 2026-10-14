@@ -105,15 +105,19 @@ export const createReport = async (req: Request, res: Response) => {
       updatedAt: new Date().toISOString(),
     });
 
-    // Run AI triage in the background or immediately
-    processMultiAgentTriage(newReport.id).catch((err) =>
-      console.error(`[Background Triage Error for ${newReport.id}]:`, err?.message || err)
-    );
+    // Run AI triage: await execution so Vercel Serverless containers do not freeze mid-flight
+    try {
+      await processMultiAgentTriage(newReport.id);
+    } catch (err: any) {
+      console.error(`[Background Triage Error for ${newReport.id}]:`, err?.message || err);
+    }
+
+    const finalReport = db.getReportById(newReport.id) || newReport;
 
     res.status(201).json({
       success: true,
       message: 'Civic report logged. Multi-agent triage dispatched.',
-      data: newReport,
+      data: finalReport,
     });
   } catch (error: any) {
     if (error instanceof z.ZodError) {

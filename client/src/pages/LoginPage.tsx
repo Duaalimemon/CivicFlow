@@ -121,11 +121,11 @@ export const LoginPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Demo Fast-Select Role Cards (Development Mode Only) */}
-        {import.meta.env.DEV && (
+        {/* Demo Fast-Select Role Cards (Presentation & Testing Profiles) */}
+        {!isRegister && (
           <div className="space-y-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block text-center">
-              One-Click Demo Profiles (Development Only)
+              One-Click Demo Profiles
             </span>
             <div className="grid grid-cols-2 gap-2.5">
               <button
