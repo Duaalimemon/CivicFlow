@@ -5,6 +5,9 @@
   "description": "CivicSense AI - Institutional Municipal Command Center & Multi-Agent Telemetry Engine",
   "scripts": {
     "install:all": "npm --prefix server install && npm --prefix client install",
+    "build:server": "npm --prefix server run build",
+    "build:client": "npm --prefix client run build",
+    "build": "npm --prefix server install && npm --prefix client install && npm --prefix server run build && npm --prefix client run build",
     "dev:server": "npm --prefix server run dev",
     "dev:client": "npm --prefix client run dev",
     "dev": "concurrently -n \"SERVER,CLIENT\" -c \"bgBlue.bold,bgTeal.bold\" \"npm run dev:server\" \"npm run dev:client\"",

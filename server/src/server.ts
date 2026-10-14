@@ -61,12 +61,24 @@ const apiLimiter = rateLimit({
 app.use('/api/', apiLimiter);
 
 // Root route
-app.get('/', (_req: Request, res: Response) => {
+app.get(['/', '/api'], (_req: Request, res: Response) => {
   res.json({
     name: 'CivicSense AI Municipal Command Engine',
     status: 'ACTIVE',
     docs: '/api/v1/health',
   });
+});
+
+// Production Serverless Hydration Gate: Ensure requests await database hydration before routes run
+app.use(async (_req: Request, _res: Response, next: NextFunction) => {
+  if (process.env.NODE_ENV === 'production' && !db.isReady) {
+    try {
+      await db.waitForHydration();
+    } catch {
+      // Hydration failures are safely handled by downstream readiness gates and error handlers
+    }
+  }
+  next();
 });
 
 // Routing Mount
@@ -106,8 +118,10 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 });
 
 export { app };
+export default app;
 
 const PORT = process.env.PORT || 5000;
+const isVercel = Boolean(process.env.VERCEL);
 const isDirectRun = Boolean(
   process.argv[1] && (
     process.argv[1].endsWith('server.ts') ||
@@ -115,7 +129,7 @@ const isDirectRun = Boolean(
   )
 );
 
-if (isDirectRun && process.env.NODE_ENV !== 'test') {
+if (!isVercel && isDirectRun && process.env.NODE_ENV !== 'test') {
   const startServer = async () => {
     if (process.env.NODE_ENV === 'production') {
       try {
